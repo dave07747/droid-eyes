@@ -1,8 +1,13 @@
 package com.lrnplex.droideyes;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -69,7 +74,7 @@ public class MainActivity extends Activity {
                 e.printStackTrace();
             }
 
-            Log.e("Droid-Eyes", "timer");
+            Log.e("Droid-Eyes", "timer****");
 
         }
     }
@@ -84,6 +89,10 @@ public class MainActivity extends Activity {
                     outputStream = openFileOutput(fileName, Context.MODE_PRIVATE);
                     outputStream.write(imageData);
                     // Removed the finish call you had here
+
+
+
+
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
@@ -98,6 +107,8 @@ public class MainActivity extends Activity {
             }
         }
     };
+
+
 
     @Override
     protected void onDestroy() {
