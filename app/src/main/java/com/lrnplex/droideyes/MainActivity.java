@@ -17,12 +17,14 @@ import java.util.TimerTask;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.hardware.Camera;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -45,8 +47,10 @@ import com.google.api.services.vision.v1.model.Feature;
 import com.google.api.services.vision.v1.model.Image;
 
 import static android.content.ContentValues.TAG;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.TextToSpeech.OnInitListener;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements OnInitListener {
 
     private int cameraId = 0;
     private Camera mCamera;
@@ -57,6 +61,8 @@ public class MainActivity extends Activity {
     private static final String CLOUD_VISION_API_KEY = "AIzaSyC47K4mjzptir9EhORgAZlAKNJzHMCvn2I";
     private static final String ANDROID_CERT_HEADER = "X-Android-Cert";
     private static final String ANDROID_PACKAGE_HEADER = "X-Android-Package";
+    private int MY_DATA_CHECK_CODE = 0;
+    private TextToSpeech myTTS;
 
     private static final String TAG = MainActivity.class.getSimpleName();
 
@@ -65,6 +71,10 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        Intent checkTTSIntent = new Intent();
+        checkTTSIntent.setAction(TextToSpeech.Engine.ACTION_CHECK_TTS_DATA);
+        startActivityForResult(checkTTSIntent, MY_DATA_CHECK_CODE);
 
         // Create an instance of Camera
         mCamera = getCameraInstance(cameraId);
@@ -89,8 +99,39 @@ public class MainActivity extends Activity {
         MyTimerTask myTask = new MyTimerTask();
         Timer myTimer = new Timer();
 
-        myTimer.schedule(myTask, 3000, 1500);
+        myTimer.schedule(myTask, 100, 100);
 
+
+    }
+
+    private void speakWords(String speech) {
+
+        myTTS.speak(speech, TextToSpeech.QUEUE_FLUSH, null);
+        myTTS.speak(speech, TextToSpeech.QUEUE_ADD, null);
+
+    }
+
+    public void onInit(int initStatus) {
+        if (initStatus == TextToSpeech.SUCCESS) {
+            myTTS.setLanguage(Locale.US);
+        }
+        else if (initStatus == TextToSpeech.ERROR) {
+            Toast.makeText(this, "Sorry! Text To Speech failed...", Toast.LENGTH_LONG).show();
+        }
+        if(myTTS.isLanguageAvailable(Locale.US)==TextToSpeech.LANG_AVAILABLE) myTTS.setLanguage(Locale.US);
+    }
+
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == MY_DATA_CHECK_CODE) {
+            if (resultCode == TextToSpeech.Engine.CHECK_VOICE_DATA_PASS) {
+                myTTS = new TextToSpeech(this, this);
+            }
+            else {
+                Intent installTTSIntent = new Intent();
+                installTTSIntent.setAction(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA);
+                startActivity(installTTSIntent);
+            }
+        }
     }
 
     class MyTimerTask extends TimerTask {
@@ -100,7 +141,7 @@ public class MainActivity extends Activity {
                 // Call startPreview before taking a picture
                 mCamera.startPreview();
                 mCamera.takePicture(null, null, null, mPictureCallback);
-                file = new File(getFilesDir(), fileName);
+                //file = new File(getFilesDir(), fileName);
             } catch (NullPointerException ne) {
                 ne.printStackTrace();
             } catch (Exception e) {
@@ -142,7 +183,8 @@ public class MainActivity extends Activity {
             @Override
             protected String doInBackground(Object... params) {
                 try {
-                    //Log.d(TAG, "callCloudVision: *************************");
+                    Log.d(TAG, "callCloudVision: *************************0");
+
                     HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();
                     JsonFactory jsonFactory = GsonFactory.getDefaultInstance();
 
@@ -165,6 +207,7 @@ public class MainActivity extends Activity {
                                     visionRequest.getRequestHeaders().set(ANDROID_CERT_HEADER, sig);
                                 }
                             };
+                    Log.d(TAG, "callCloudVision: *************************1");
 
                     Vision.Builder builder = new Vision.Builder(httpTransport, jsonFactory, null);
                     builder.setVisionRequestInitializer(requestInitializer);
@@ -181,13 +224,17 @@ public class MainActivity extends Activity {
                         Image base64EncodedImage = new Image();
                         // Convert the bitmap to a JPEG
                         // Just in case it's a format that Android understands but Cloud Vision
-                        /*ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                        BitmapFactory.Options opt = new BitmapFactory.Options();
+                        opt.inPreferredConfig = Bitmap.Config.RGB_565;
+                        Log.d("callCloudVision", String.valueOf(imageBytes.length));
+                        Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length, opt);
+                        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream);
                         bitmap.recycle();
-                        byte[] imageBytes = byteArrayOutputStream.toByteArray();*/
+                        byte[] imageByte = byteArrayOutputStream.toByteArray();
 
                         // Base64 encode the JPEG
-                        base64EncodedImage.encodeContent(imageBytes);
+                        base64EncodedImage.encodeContent(imageByte);
                         annotateImageRequest.setImage(base64EncodedImage);
 
                         // add the features we want
@@ -206,9 +253,10 @@ public class MainActivity extends Activity {
                             vision.images().annotate(batchAnnotateImagesRequest);
                     // Due to a bug: requests to Vision API containing large images fail when GZipped.
                     annotateRequest.setDisableGZipContent(true);
-                    Log.d(TAG, "created Cloud Vision request object, sending request");
+                    Log.d("callCloudVision", "created Cloud Vision request object, sending request");
 
                     BatchAnnotateImagesResponse response = annotateRequest.execute();
+                    Log.d("callCloudVision", "Response received");
                     return convertResponseToString(response);
 
                 } catch (GoogleJsonResponseException e) {
@@ -222,10 +270,12 @@ public class MainActivity extends Activity {
 
             protected void onPostExecute(String result) {
                 //mImageDetails.setText(result);
-                Log.d(TAG, "onPostExecute: " + result);
+                Log.d("callCloudVision", "onPostExecute: " + result);
+                speakWords(result);
             }
         }.execute();
     }
+
 
 
     private String convertResponseToString(BatchAnnotateImagesResponse response) {
@@ -240,6 +290,8 @@ public class MainActivity extends Activity {
         } else {
             message += "nothing";
         }
+
+
 
         return message;
     }
